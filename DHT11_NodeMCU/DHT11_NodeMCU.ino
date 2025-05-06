@@ -9,13 +9,8 @@
 #define LED3PIN D6
 #define DHTPIN D4
 #define DHTTYPE DHT11
-#define col 16
-#define lin 2
-#define addr 0x3F
 
 DHT dht(DHTPIN, DHTTYPE);
-
-LiquidCrystal_I2C lcd(addr, col, lin);
 
 // Wifi parameters
 #define WLAN_SSID ""
@@ -24,11 +19,10 @@ LiquidCrystal_I2C lcd(addr, col, lin);
 // Adafruit IO
 #define AIO_SERVER "io.adafruit.com"
 #define AIO_SERVERPORT 1883
-#define AIO_USERNAME ""
-#define AIO_KEY ""
-WiFiClient client;
+#define AIO_USERNAME  ""
+#define AIO_KEY       ""
 
-// Setup MQTT client
+WiFiClient client;
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
 
 // Publish data to feeds on Adafruit IO
@@ -38,53 +32,48 @@ Adafruit_MQTT_Publish humidity = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/fee
 void MQTT_connect();
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   dht.begin();
   delay(10);
 
-  lcd.begin(col, lin);
-  lcd.init();
-  lcd.backlight();
-
-  lcd.setCursor(0, 0);
-  lcd.print("Adafruit MQTT demo");
-
-  pinMode(D8, OUTPUT);
-  pinMode(D7, OUTPUT);
-  pinMode(D6, OUTPUT);
+  pinMode(LED1PIN, OUTPUT);
+  pinMode(LED2PIN, OUTPUT);
+  pinMode(LED3PIN, OUTPUT);
 
   Serial.println();
   Serial.println(F("Adafruit MQTT demo"));
 
-  // Connect to WiFi access point.
-  Serial.println(); Serial.println();
-  Serial.print("Connecting to ");
+  // Conectando ao WiFi
+  Serial.print("Conectando ao WiFi: ");
   Serial.println(WLAN_SSID);
-  
-
   WiFi.begin(WLAN_SSID, WLAN_PASS);
-  if (WiFi.status() != WL_CONNECTED) {
-    while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      Serial.print(".");
-      digitalWrite(D8, true);
-      digitalWrite(D7, false);
-      digitalWrite(D6, true);
-    }
-    if (WiFi.status() != WL_DISCONNECTED) {
-      digitalWrite(D8, true);
-      digitalWrite(D7, true);
-      digitalWrite(D6, false);
-    }
+
+  int tentativas = 0;
+  while (WiFi.status() != WL_CONNECTED && tentativas < 20) {
+    delay(500);
+    Serial.print(".");
+    tentativas++;
+    digitalWrite(LED1PIN, HIGH);
+    digitalWrite(LED2PIN, LOW);
+    digitalWrite(LED3PIN, HIGH);
   }
-  digitalWrite(D8, false);
-  digitalWrite(D7, true);
-  digitalWrite(D6, true);
-  Serial.println();
 
-  Serial.println("WiFi connected");
-  Serial.println("IP address: "); Serial.println(WiFi.localIP());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi conectado!");
+    Serial.print("IP: ");
+    Serial.println(WiFi.localIP());
 
+    // LED indica conexão OK
+    digitalWrite(LED1PIN, LOW);
+    digitalWrite(LED2PIN, HIGH);
+    digitalWrite(LED3PIN, HIGH);
+  } else {
+    Serial.println("\nFalha ao conectar no WiFi.");
+    // LED indica erro
+    digitalWrite(LED1PIN, HIGH);
+    digitalWrite(LED2PIN, HIGH);
+    digitalWrite(LED3PIN, LOW);
+  }
 }
 
 void loop() {
@@ -93,47 +82,44 @@ void loop() {
   float h = dht.readHumidity();
   float t = dht.readTemperature();
 
-  if (isnan(t) || isnan(h)) 
-  {
-  Serial.println("Falha na leitura do dht11...");
-  } 
-  else 
-  {
-  //publish temperature and humidity
-  Serial.print("Temperature: ");
-  Serial.print(t);
-  Serial.println("°C");
-  Serial.print("Humidity: ");
-  Serial.print(h);
-  Serial.println("%");
-  
-  temperature.publish(t);
-  humidity.publish(h);
-    
-  delay(60000);
+  if (isnan(t) || isnan(h)) {
+    Serial.println("Falha na leitura do DHT11...");
+  } else {
+    Serial.print("Temperatura: ");
+    Serial.print(t);
+    Serial.println("°C");
+    Serial.print("Umidade: ");
+    Serial.print(h);
+    Serial.println("%");
+
+    temperature.publish(t);
+    humidity.publish(h);
   }
+
+  delay(60000); // 1 minuto entre envios
 }
 
 void MQTT_connect() {
   int8_t ret;
 
-  // Stop if already connected.
   if (mqtt.connected()) {
     return;
   }
 
-  Serial.print("Connecting to MQTT... ");
+  Serial.print("Conectando ao MQTT... ");
 
-  uint8_t retries = 3;
+  uint8_t tentativas = 3;
   while ((ret = mqtt.connect()) != 0) {
-       Serial.println(mqtt.connectErrorString(ret));
-       Serial.println("Retrying MQTT connection in 5 seconds...");
-       mqtt.disconnect();
-       delay(5000);
-       retries--;
-       if (retries == 0) {
-         while (1);
-       }
+    Serial.println(mqtt.connectErrorString(ret));
+    Serial.println("Tentando novamente em 5 segundos...");
+    mqtt.disconnect();
+    delay(5000);
+    tentativas--;
+    if (tentativas == 0) {
+      Serial.println("Falha na conexão MQTT. Reiniciando ESP...");
+      ESP.restart();  // Reinicia o ESP após falha nas tentativas
+    }
   }
-  Serial.println("MQTT Connected!");
+
+  Serial.println("Conectado ao MQTT com sucesso!");
 }
